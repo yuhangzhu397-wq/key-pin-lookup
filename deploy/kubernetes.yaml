@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: key-pin-lookup
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: key-pin-lookup
+  template:
+    metadata:
+      labels:
+        app: key-pin-lookup
+    spec:
+      containers:
+        - name: app
+          image: REGISTRY/joymaas/key-pin-lookup:VERSION
+          ports:
+            - name: http
+              containerPort: 8787
+          env:
+            - name: PORT
+              value: "8787"
+            - name: DATA_SOURCE
+              value: joybuilder_ops
+            - name: OPS_API_BASE
+              value: http://joybuilder-ops.jdcloud.com/api/v1
+            - name: OPS_DB_CONFIG_NAME
+              value: 国内
+            - name: OPS_DATABASE
+              value: maas
+            - name: OPS_TABLE
+              value: api_key
+            - name: AUTH_MODE
+              value: proxy
+            - name: AUTH_USER_HEADER
+              value: x-erp-user
+            - name: AUDIT_LOG
+              value: "true"
+            - name: TRUST_PROXY
+              value: "true"
+            - name: OPS_ACCESS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: key-pin-lookup-secrets
+                  key: ops-access-token
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: key-pin-lookup
+spec:
+  type: ClusterIP
+  selector:
+    app: key-pin-lookup
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
