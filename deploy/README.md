@@ -47,6 +47,45 @@ docker compose -f docker-compose.example.yml up -d --build
 4. 应用 Deployment 和 Service。
 5. 使用集团统一登录网关/Ingress 暴露 Service；Ingress 配置由内部平台规范决定，本模板不会创建无认证入口。
 
+## Coding 行云流水线
+
+仓库使用 `dev` 分支作为发布源。建议流水线采用“自动检查和构建、手动确认部署”的方式：
+
+```text
+dev 提交 → pnpm check → 构建并推送镜像 → 手动确认 → 部署 Kubernetes
+```
+
+流水线需要提供以下非敏感变量：
+
+```text
+IMAGE_REPOSITORY=内网镜像仓库/命名空间/key-pin-lookup
+KUBE_NAMESPACE=目标命名空间
+```
+
+构建阶段：
+
+```bash
+corepack enable
+pnpm install --frozen-lockfile
+pnpm check
+IMAGE=$(IMAGE_REPOSITORY="$IMAGE_REPOSITORY" ./deploy/build-image.sh)
+```
+
+将 `IMAGE` 作为构建产出传给部署阶段，经过人工确认后执行：
+
+```bash
+IMAGE="$IMAGE" KUBE_NAMESPACE="$KUBE_NAMESPACE" ./deploy/deploy-kubernetes.sh
+```
+
+流水线执行环境需要具备 Docker、内网镜像仓库推送权限、`kubectl` 和目标 namespace 的最小发布权限。`OPS_ACCESS_TOKEN` 不进入流水线命令或 Git，必须提前保存到 Kubernetes Secret：
+
+```text
+Secret: key-pin-lookup-secrets
+Key: ops-access-token
+```
+
+镜像版本默认使用提交 SHA，便于审计和回滚。不要使用可变的 `latest` 标签发布生产环境。
+
 ## 验证
 
 - `GET /healthz` 返回 `{ "status": "ok" }`。
