@@ -20,7 +20,7 @@ export default function SearchPanel({
           type={visible ? 'text' : 'password'}
           value={value}
           onChange={onChange}
-          placeholder="粘贴 pk-... 或 key-..."
+          placeholder="输入 pk-... 或 key-... 的前几位"
           autoComplete="off"
           autoCapitalize="none"
           spellCheck="false"
@@ -40,7 +40,7 @@ export default function SearchPanel({
         {loading ? '查询中…' : '查询'}
       </button>
       <p id="key-helper" className="field-helper">
-        支持 pk- 开头的 API Key 和 key- 开头的 Key ID
+        支持前缀查询；pk- 或 key- 后至少输入 4 位，匹配多条时请继续补充字符
       </p>
     </form>
   );

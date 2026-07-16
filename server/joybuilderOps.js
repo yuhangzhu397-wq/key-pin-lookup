@@ -1,4 +1,4 @@
-import { columnForKey, isSupportedKey } from './validation.js';
+import { columnForKey, isSupportedKey, toSqlLikePrefix } from './validation.js';
 
 let cachedDbConfigId;
 
@@ -130,7 +130,8 @@ export async function lookupPinViaJoyBuilderOps(key) {
   const database = configured('OPS_DATABASE', 'maas');
   const table = safeTableName();
   const column = columnForKey(key);
-  const sql = `SELECT user_id, api_key_id FROM \`${table}\` WHERE \`${column}\` = '${key}' LIMIT 2`;
+  const prefix = toSqlLikePrefix(key).replaceAll("'", "''");
+  const sql = `SELECT user_id, api_key_id FROM \`${table}\` WHERE \`${column}\` LIKE '${prefix}' ESCAPE '=' LIMIT 2`;
 
   const payload = await requestOps('/query/execute', {
     method: 'POST',
@@ -148,7 +149,7 @@ export async function lookupPinViaJoyBuilderOps(key) {
   const rows = Array.isArray(data?.rows) ? data.rows : [];
 
   if (rows.length === 0) return null;
-  if (rows.length > 1) throw opsError('AMBIGUOUS_MAPPING', 'API Key 存在多个归属。');
+  if (rows.length > 1) throw opsError('AMBIGUOUS_MAPPING', '当前前缀匹配到多个 Key。');
 
   const pin = valueFromRow(rows[0], columns, 'user_id');
   const keyId = valueFromRow(rows[0], columns, 'api_key_id');

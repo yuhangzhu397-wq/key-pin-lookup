@@ -63,12 +63,12 @@ DB_NAME=maas
 DB_TABLE=api_key
 ```
 
-工具执行参数化精确查询：
+工具执行参数化前缀查询。调用方会将输入末尾追加 `%`，并转义 `_` 等 `LIKE` 通配符：
 
 ```sql
 SELECT user_id, api_key_id
 FROM api_key
-WHERE api_key = ?
+WHERE api_key LIKE ? ESCAPE '='
 LIMIT 2;
 ```
 
@@ -77,11 +77,11 @@ LIMIT 2;
 ```sql
 SELECT user_id, api_key_id
 FROM api_key
-WHERE api_key_id = ?
+WHERE api_key_id LIKE ? ESCAPE '='
 LIMIT 2;
 ```
 
-建议确认 `api_key` 和 `api_key_id` 已建立索引。生产环境不要开启 `MOCK_MODE`。
+为避免短前缀扫描过多数据，`pk-` 或 `key-` 后至少需要输入 4 位。查询最多读取两行：唯一匹配时返回 PIN，匹配多条时提示继续输入更多字符。建议确认 `api_key` 和 `api_key_id` 已建立索引。生产环境不要开启 `MOCK_MODE`。
 
 ## 构建和运行
 

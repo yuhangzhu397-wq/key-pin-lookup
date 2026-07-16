@@ -1,6 +1,6 @@
 import mysql from 'mysql2/promise';
 import { lookupPinViaJoyBuilderOps } from './joybuilderOps.js';
-import { columnForKey } from './validation.js';
+import { columnForKey, toSqlLikePrefix } from './validation.js';
 
 let pool;
 
@@ -48,7 +48,7 @@ function getPool() {
 }
 
 function mockLookup(key) {
-  if (key === 'key-demo-zjpt888' || key === 'pk-demo-zjpt888') {
+  if ('key-demo-zjpt888'.startsWith(key) || 'pk-demo-zjpt888'.startsWith(key)) {
     return {
       pin: 'ZJPT888',
       keyId: 'key-demo-zjpt888',
@@ -58,11 +58,10 @@ function mockLookup(key) {
 }
 
 async function lookupPinViaMySql(key) {
-
   const table = getTableName();
   const column = columnForKey(key);
-  const sql = `SELECT user_id, api_key_id FROM \`${table}\` WHERE \`${column}\` = ? LIMIT 2`;
-  const [rows] = await getPool().execute(sql, [key]);
+  const sql = `SELECT user_id, api_key_id FROM \`${table}\` WHERE \`${column}\` LIKE ? ESCAPE '=' LIMIT 2`;
+  const [rows] = await getPool().execute(sql, [toSqlLikePrefix(key)]);
 
   if (rows.length === 0) return null;
   if (rows.length > 1) {

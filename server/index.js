@@ -9,7 +9,7 @@ import { lookupPin } from './db.js';
 import { isSupportedKey } from './validation.js';
 
 const app = express();
-const port = Number(process.env.PORT || 8787);
+const port = Number(process.env.PORT || 8080);
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const distDir = path.resolve(currentDir, '../dist');
 
@@ -42,7 +42,7 @@ app.post('/api/lookup', async (request, response) => {
 
   const key = typeof request.body?.key === 'string' ? request.body.key.trim() : '';
   if (!isSupportedKey(key)) {
-    response.status(400).json({ message: '请输入有效的 API Key 或 Key ID。' });
+    response.status(400).json({ message: '请输入 pk- 或 key- 开头，并至少包含 4 位内容的 Key 前缀。' });
     return;
   }
 
@@ -72,7 +72,7 @@ app.post('/api/lookup', async (request, response) => {
     response.json(result);
   } catch (error) {
     if (error.code === 'AMBIGUOUS_MAPPING') {
-      response.status(409).json({ message: '查询到多个归属，请联系平台研发核查。' });
+      response.status(409).json({ message: '当前前缀匹配到多个 Key，请继续输入更多字符。' });
       return;
     }
 

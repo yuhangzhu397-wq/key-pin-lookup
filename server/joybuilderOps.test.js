@@ -58,13 +58,13 @@ test('uses JoyBuilder Ops token and resolves a Key ID to PIN', async () => {
     assert.deepEqual(requests[1].body, {
       dbConfigId: 42,
       database: 'maas',
-      sql: "SELECT user_id, api_key_id FROM `api_key` WHERE `api_key_id` = 'key-demo-zjpt888' LIMIT 2",
+      sql: "SELECT user_id, api_key_id FROM `api_key` WHERE `api_key_id` LIKE 'key-demo-zjpt888%' ESCAPE '=' LIMIT 2",
       page: 1,
       pageSize: 2,
     });
     assert.equal(
       requests[2].body.sql,
-      "SELECT user_id, api_key_id FROM `api_key` WHERE `api_key` = 'pk-demo-zjpt888' LIMIT 2",
+      "SELECT user_id, api_key_id FROM `api_key` WHERE `api_key` LIKE 'pk-demo-zjpt888%' ESCAPE '=' LIMIT 2",
     );
   } finally {
     process.env = previous;

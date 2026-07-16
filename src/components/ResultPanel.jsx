@@ -22,7 +22,7 @@ export default function ResultPanel({ result, copied, onCopy }) {
           </div>
           <div>
             <dt>状态</dt>
-            <dd className="status-value">匹配成功</dd>
+            <dd className="status-value">唯一匹配</dd>
           </div>
         </dl>
         <button className="copy-button" type="button" onClick={onCopy}>
