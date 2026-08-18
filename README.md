@@ -1,6 +1,9 @@
 # Key 归属查询
 
-一个独立的 MaaS 内网小工具：运营人员输入 API Key（`pk-...`）或 Key ID（`key-...`），工具查询 `api_key` 表并返回对应的 `user_id`（PIN）。
+一个独立的 MaaS 内网运营工具，包含：
+
+- Key 归属查询：输入 API Key（`pk-...`）或 Key ID（`key-...`），返回对应的 `user_id`（PIN）。
+- TPM 总水位：按模型服务汇总全部 Key、全部 PIN 最近 60 秒的 Token 使用量，并除以 `model_service.tpm`，每 10 秒刷新。
 
 ## 本地预览
 
@@ -40,6 +43,13 @@ OPS_DATABASE=maas
 OPS_TABLE=api_key
 ```
 
+如果部署平台占用了 `DATA_SOURCE` 或 `OPS_API_BASE` 这类通用变量名，可以改用应用专用变量：
+
+```dotenv
+JOYMAAS_DATA_SOURCE=joybuilder_ops
+JOYBUILDER_OPS_API_BASE=http://joybuilder-ops.jdcloud.com/api/v1
+```
+
 工具会先通过 `/db-configs` 自动找到“国内”连接，再调用 `/query/execute` 查询。访问权限与生成 Token 的 JoyBuilder Ops 用户一致。
 
 如果存在多个同名连接，可额外配置：
@@ -47,6 +57,21 @@ OPS_TABLE=api_key
 ```dotenv
 OPS_DB_CONFIG_ID=数据库连接ID
 ```
+
+### 下游配额持久缓存
+
+“下游配额”需要聚合 14 天分钟数据，首次分析可能较慢。JoyBuilder Ops 模式会按 24 小时分片读取记录，再在服务端合并 14 天峰值，避免单条聚合 SQL 压垮查询连接。只有全部分片成功才会发布新结果。服务会把每次成功结果写入本机缓存；以后即使服务重启，页面也会先立即展示上一次结果，再在后台更新：
+
+安全限制：下游监控不再读取 `api_key_rate_limit` 全量 Key 限额表；Key 侧只保留实际调用用量，PIN 侧仍读取 `user_rate_limit`。旧版缓存会因缓存版本升级自动失效。
+
+```dotenv
+USAGE_MONITOR_REFRESH_MINUTES=360
+USAGE_MONITOR_CACHE_FILE=.data/usage-monitor-cache.json
+```
+
+缓存默认每 6 小时更新，也可点击页面“重新分析”触发后台更新。同一时间只执行一份分析任务；首次分析失败且尚无缓存时，服务会每 5 分钟自动重试。缓存文件仅包含监控结果，不包含 JoyBuilder Ops Token 或完整 API Key，并已通过 `.gitignore` 排除。
+
+该机制只读取数据库，不会执行 `INSERT`、`UPDATE` 或 `DELETE`。如需清空本机缓存，可停止服务后删除 `.data/usage-monitor-cache.json`。
 
 ## 直接连接 MySQL（备选）
 
@@ -90,7 +115,7 @@ pnpm build
 pnpm start
 ```
 
-默认监听 `8787` 端口。生产环境建议放在公司统一登录网关或反向代理之后，并限制为 MaaS 运营角色访问。
+默认监听 `8080` 端口。生产环境建议放在公司统一登录网关或反向代理之后，并限制为 MaaS 运营角色访问。
 
 ## 给运营团队部署
 

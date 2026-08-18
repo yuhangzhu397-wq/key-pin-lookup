@@ -1,4 +1,4 @@
-import { EyeIcon } from '../icons.jsx';
+import { Eye, EyeSlash, Info, MagnifyingGlass, ShieldCheck } from '@phosphor-icons/react';
 
 export default function SearchPanel({
   value,
@@ -10,9 +10,14 @@ export default function SearchPanel({
 }) {
   return (
     <form className="search-panel" onSubmit={onSubmit} noValidate>
-      <label className="field-label" htmlFor="key-input">
-        API Key / Key ID
-      </label>
+      <div className="lookup-column-heading">
+        <span className="lookup-heading-icon"><MagnifyingGlass size={19} weight="bold" /></span>
+        <div>
+          <h2>查询条件</h2>
+          <p>输入一种凭证标识即可定位归属关系</p>
+        </div>
+      </div>
+      <label className="field-label" htmlFor="key-input">Key / Key ID</label>
       <div className="input-wrap">
         <input
           id="key-input"
@@ -20,7 +25,7 @@ export default function SearchPanel({
           type={visible ? 'text' : 'password'}
           value={value}
           onChange={onChange}
-          placeholder="输入 pk-... 或 key-... 的前几位"
+          placeholder="Key ID、完整 Key 或前 7 位"
           autoComplete="off"
           autoCapitalize="none"
           spellCheck="false"
@@ -33,15 +38,28 @@ export default function SearchPanel({
           onClick={onToggleVisibility}
           aria-label={visible ? '隐藏 Key' : '显示 Key'}
         >
-          <EyeIcon crossed={visible} />
+          {visible ? <EyeSlash size={21} /> : <Eye size={21} />}
         </button>
       </div>
       <button className="primary-button" type="submit" disabled={!value.trim() || loading}>
         {loading ? '查询中…' : '查询'}
       </button>
-      <p id="key-helper" className="field-helper">
-        支持前缀查询；pk- 或 key- 后至少输入 4 位，匹配多条时请继续补充字符
-      </p>
+      <section className="lookup-format-guide" aria-labelledby="format-guide-title">
+        <h3 id="format-guide-title">支持的查询格式</h3>
+        <dl>
+          <div><dt>完整 API Key</dt><dd>pk-xxxxxxxxxxxxxxxx</dd></div>
+          <div><dt>前 7 位（含前缀）</dt><dd>pk-abcd</dd></div>
+          <div><dt>Key ID</dt><dd>key-xxxxxxxx</dd></div>
+        </dl>
+        <p id="key-helper"><Info size={18} />若短 Key 匹配多条记录，系统会提示继续补充字符。</p>
+      </section>
+      <aside className="lookup-security-reminder">
+        <ShieldCheck size={20} weight="duotone" />
+        <div>
+          <strong>安全提醒</strong>
+          <span>完整 Key 默认隐藏，仅在主动查看后显示 30 秒，且不会写入浏览器历史。</span>
+        </div>
+      </aside>
     </form>
   );
 }

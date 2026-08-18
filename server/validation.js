@@ -1,8 +1,11 @@
-export const MIN_KEY_PREFIX_LENGTH = 4;
-export const KEY_PATTERN = /^(?:pk-|key-)[a-zA-Z0-9_-]{4,500}$/;
+export const MIN_SHORT_KEY_LENGTH = 7;
+export const KEY_PATTERN = /^(?:pk-[a-zA-Z0-9_-]{4,509}|key-[a-zA-Z0-9_-]{3,508})$/;
 
 export function isSupportedKey(value) {
-  return typeof value === 'string' && KEY_PATTERN.test(value);
+  return typeof value === 'string'
+    && value.length >= MIN_SHORT_KEY_LENGTH
+    && value.length <= 512
+    && KEY_PATTERN.test(value);
 }
 
 export function columnForKey(value) {

@@ -3,9 +3,11 @@ import Header from './components/Header.jsx';
 import SearchPanel from './components/SearchPanel.jsx';
 import ResultPanel from './components/ResultPanel.jsx';
 import Feedback from './components/Feedback.jsx';
-import { InfoIcon } from './icons.jsx';
+import TpmMonitor from './components/TpmMonitor.jsx';
+import QuotaExplorer from './components/QuotaExplorer.jsx';
+import UsageMonitor from './components/UsageMonitor.jsx';
 
-const KEY_PATTERN = /^(?:pk-|key-)[a-zA-Z0-9_-]{4,500}$/;
+const KEY_PATTERN = /^(?:pk-[a-zA-Z0-9_-]{4,509}|key-[a-zA-Z0-9_-]{3,508})$/;
 
 function messageForResponse(status, payload) {
   if (status === 404) {
@@ -29,24 +31,27 @@ function messageForResponse(status, payload) {
 }
 
 export default function App() {
+  const [page, setPage] = useState(() => {
+    if (window.location.hash === '#tpm') return 'tpm';
+    if (window.location.hash === '#quota') return 'quota';
+    if (window.location.hash === '#usage') return 'usage';
+    return 'lookup';
+  });
   const [keyValue, setKeyValue] = useState('');
   const [keyVisible, setKeyVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [message, setMessage] = useState(null);
-  const [copied, setCopied] = useState(false);
-
   async function handleSubmit(event) {
     event.preventDefault();
     const key = keyValue.trim();
 
-    setCopied(false);
     setResult(null);
 
     if (!KEY_PATTERN.test(key)) {
       setMessage({
         title: 'Key 格式不正确',
-        detail: '请输入 pk- 或 key- 开头的 Key，前缀内容至少输入 4 位。',
+        detail: '请输入 pk- 或 key- 开头，且总长度至少为 7 位的 Key 或 Key ID。',
       });
       return;
     }
@@ -82,50 +87,40 @@ export default function App() {
     setKeyValue(event.target.value);
     setResult(null);
     setMessage(null);
-    setCopied(false);
   }
 
-  async function handleCopy() {
-    if (!result?.pin) return;
-
-    try {
-      await navigator.clipboard.writeText(result.pin);
-      setCopied(true);
-    } catch {
-      setMessage({
-        title: '复制失败',
-        detail: '浏览器未允许访问剪贴板，请手动选择并复制 PIN。',
-      });
-    }
+  function handlePageChange(nextPage) {
+    setPage(nextPage);
+    const hash = nextPage === 'tpm' ? '#tpm' : nextPage === 'quota' ? '#quota' : nextPage === 'usage' ? '#usage' : window.location.pathname;
+    window.history.replaceState(null, '', hash);
   }
 
   return (
-    <div className="app-shell">
-      <Header />
-      <main className="main-content">
-        <section className="page-intro" aria-labelledby="page-title">
-          <h1 id="page-title">查询 Key 对应的 PIN</h1>
-          <p>输入完整 Key 或前几位，查询其所属账号。</p>
+    <div className={`app-shell page-${page}`}>
+      <Header page={page} onPageChange={handlePageChange} />
+      <main className={`main-content ${page === 'quota' || page === 'usage' ? 'main-content-wide' : ''} ${page === 'lookup' ? 'lookup-main' : ''}`}>
+        {page === 'tpm' ? <TpmMonitor /> : page === 'quota' ? <QuotaExplorer /> : page === 'usage' ? <UsageMonitor /> : <>
+        <section className="page-intro lookup-intro" aria-labelledby="page-title">
+          <h1 id="page-title">Key 归属与凭证查询</h1>
+          <p>输入 Key ID、完整 Key 或含前缀的前 7 位，查询所属 PIN 并安全获取完整 API Key。</p>
         </section>
 
-        <SearchPanel
-          value={keyValue}
-          visible={keyVisible}
-          loading={loading}
-          onChange={handleChange}
-          onToggleVisibility={() => setKeyVisible((current) => !current)}
-          onSubmit={handleSubmit}
-        />
+        <div className="lookup-workspace">
+          <SearchPanel
+            value={keyValue}
+            visible={keyVisible}
+            loading={loading}
+            onChange={handleChange}
+            onToggleVisibility={() => setKeyVisible((current) => !current)}
+            onSubmit={handleSubmit}
+          />
 
-        <div className="feedback-slot" aria-live="polite">
-          <Feedback message={message} />
-          {result ? <ResultPanel result={result} copied={copied} onCopy={handleCopy} /> : null}
+          <div className="lookup-result-column" aria-live="polite">
+            <Feedback message={message} />
+            <ResultPanel result={result} loading={loading} />
+          </div>
         </div>
-
-        <aside className="security-note">
-          <InfoIcon />
-          <span>工具自身不会在浏览器或本地历史中保存完整 Key；上游运维平台可能保留查询审计记录。</span>
-        </aside>
+        </>}
       </main>
     </div>
   );

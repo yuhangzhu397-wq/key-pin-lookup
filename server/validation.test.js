@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { isSupportedKey, toSqlLikePrefix } from './validation.js';
 
-test('accepts a Key prefix with at least four characters after its type prefix', () => {
+test('accepts full Key IDs and short prefixes with at least seven total characters', () => {
   assert.equal(isSupportedKey('pk-1234'), true);
+  assert.equal(isSupportedKey('key-abc'), true);
   assert.equal(isSupportedKey('key-ab_cd'), true);
   assert.equal(isSupportedKey('pk-123'), false);
+  assert.equal(isSupportedKey('key-ab'), false);
   assert.equal(isSupportedKey('key-'), false);
 });
 

@@ -11,6 +11,7 @@ import { isSupportedKey } from './validation.js';
 const app = express();
 const port = Number(process.env.PORT || 8080);
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
+const appDir = path.resolve(currentDir, '..');
 const distDir = path.resolve(currentDir, '../dist');
 
 if (process.env.TRUST_PROXY === 'true') {
@@ -42,7 +43,7 @@ app.post('/api/lookup', async (request, response) => {
 
   const key = typeof request.body?.key === 'string' ? request.body.key.trim() : '';
   if (!isSupportedKey(key)) {
-    response.status(400).json({ message: '请输入 pk- 或 key- 开头，并至少包含 4 位内容的 Key 前缀。' });
+    response.status(400).json({ message: '请输入 pk- 或 key- 开头，且总长度至少为 7 位的 Key 或 Key ID。' });
     return;
   }
 
@@ -99,6 +100,11 @@ app.post('/api/lookup', async (request, response) => {
     console.error('lookup_failed', { code: error.code || 'UNKNOWN' });
     response.status(500).json({ message: '查询服务暂时不可用。' });
   }
+});
+
+app.all(['/api/model-tpm', '/api/quotas', '/api/usage-monitor'], (_request, response) => {
+  response.set('Cache-Control', 'no-store');
+  response.status(503).json({ message: '该功能已暂时停用，目前仅开放 Key 归属查询。' });
 });
 
 app.use(express.static(distDir, {
