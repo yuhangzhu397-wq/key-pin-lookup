@@ -119,7 +119,11 @@ export default function ResultPanel({ result, loading }) {
         </div>
         <div><dt>Key 类型</dt><dd>{labelForKeyType(result.keyType)}</dd></div>
         <div><dt>关联应用</dt><dd>{result.appId || result.description || '未关联应用'}</dd></div>
-        {result.erp ? <div><dt>使用人 ERP</dt><dd>{result.erp}</dd></div> : null}
+        <div><dt>Key 使用人 ERP</dt><dd>{result.keyErp || result.erp || '未绑定'}</dd></div>
+        <div>
+          <dt>PIN 对应 ERP</dt>
+          <dd>{result.pinErp || (result.pinErpSupported === true ? '未配置' : '当前数据源未提供')}</dd>
+        </div>
       </dl>
 
       <div className="lookup-credential">

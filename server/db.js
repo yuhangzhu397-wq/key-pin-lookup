@@ -38,6 +38,17 @@ function getTableName() {
   return table;
 }
 
+function getPinTableName() {
+  const table = (process.env.DB_PIN_TABLE || '').trim();
+  if (!table) return null;
+  if (!/^[a-zA-Z0-9_]+$/.test(table)) {
+    const error = new Error('Invalid DB_PIN_TABLE');
+    error.code = 'DB_NOT_CONFIGURED';
+    throw error;
+  }
+  return table;
+}
+
 function getPool() {
   if (pool) return pool;
 
@@ -67,6 +78,9 @@ function mockLookup(key) {
       appId: 'app-demo',
       description: '本地演示 Key',
       erp: 'demo.user',
+      keyErp: 'demo.user',
+      pinErp: 'demo.pin.owner',
+      pinErpSupported: true,
     };
   }
   return null;
@@ -74,8 +88,27 @@ function mockLookup(key) {
 
 async function lookupPinViaMySql(key) {
   const table = getTableName();
+  const pinTable = getPinTableName();
   const column = columnForKey(key);
-  const sql = `SELECT user_id, api_key_id, api_key, key_type, app_id, description, erp FROM \`${table}\` WHERE \`${column}\` LIKE ? ESCAPE '=' LIMIT 2`;
+  const pinErpSelect = pinTable
+    ? `(
+      SELECT pin_user.erp
+      FROM \`${pinTable}\` pin_user
+      WHERE pin_user.user_id = key_record.user_id
+    )`
+    : 'NULL';
+  const sql = `SELECT
+    key_record.user_id,
+    key_record.api_key_id,
+    key_record.api_key,
+    key_record.key_type,
+    key_record.app_id,
+    key_record.description,
+    key_record.erp AS key_erp,
+    ${pinErpSelect} AS pin_erp
+  FROM \`${table}\` key_record
+  WHERE key_record.\`${column}\` LIKE ? ESCAPE '='
+  LIMIT 2`;
   const [rows] = await getPool().execute(sql, [toSqlLikePrefix(key)]);
 
   if (rows.length === 0) return null;
@@ -97,7 +130,10 @@ async function lookupPinViaMySql(key) {
     keyType: rows[0].key_type ? String(rows[0].key_type) : null,
     appId: rows[0].app_id ? String(rows[0].app_id) : null,
     description: rows[0].description ? String(rows[0].description) : null,
-    erp: rows[0].erp ? String(rows[0].erp) : null,
+    erp: rows[0].key_erp ? String(rows[0].key_erp) : null,
+    keyErp: rows[0].key_erp ? String(rows[0].key_erp) : null,
+    pinErp: rows[0].pin_erp ? String(rows[0].pin_erp) : null,
+    pinErpSupported: Boolean(pinTable),
   };
 }
 

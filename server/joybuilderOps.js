@@ -141,6 +141,15 @@ function safeTableName() {
   return table;
 }
 
+function optionalPinTableName() {
+  const table = configured('OPS_PIN_TABLE');
+  if (!table) return null;
+  if (!/^[a-zA-Z0-9_]+$/.test(table)) {
+    throw opsError('OPS_NOT_CONFIGURED', 'OPS_PIN_TABLE 配置无效。');
+  }
+  return table;
+}
+
 function valueFromRow(row, columns, column) {
   if (Array.isArray(row)) return row[columns.indexOf(column)];
   return row?.[column];
@@ -212,9 +221,28 @@ export async function lookupPinViaJoyBuilderOps(key) {
   }
 
   const table = safeTableName();
+  const pinTable = optionalPinTableName();
   const column = columnForKey(key);
   const prefix = toSqlLikePrefix(key).replaceAll("'", "''");
-  const sql = `SELECT user_id, api_key_id, api_key, key_type, app_id, description, erp FROM \`${table}\` WHERE \`${column}\` LIKE '${prefix}' ESCAPE '=' LIMIT 2`;
+  const pinErpSelect = pinTable
+    ? `(
+      SELECT pin_user.erp
+      FROM \`${pinTable}\` pin_user
+      WHERE pin_user.user_id = key_record.user_id
+    )`
+    : 'NULL';
+  const sql = `SELECT
+    key_record.user_id,
+    key_record.api_key_id,
+    key_record.api_key,
+    key_record.key_type,
+    key_record.app_id,
+    key_record.description,
+    key_record.erp AS key_erp,
+    ${pinErpSelect} AS pin_erp
+  FROM \`${table}\` key_record
+  WHERE key_record.\`${column}\` LIKE '${prefix}' ESCAPE '='
+  LIMIT 2`;
 
   const payload = await executeQuery(sql, 2);
 
@@ -231,7 +259,8 @@ export async function lookupPinViaJoyBuilderOps(key) {
   const keyType = valueFromRow(rows[0], columns, 'key_type');
   const appId = valueFromRow(rows[0], columns, 'app_id');
   const description = valueFromRow(rows[0], columns, 'description');
-  const erp = valueFromRow(rows[0], columns, 'erp');
+  const keyErp = valueFromRow(rows[0], columns, 'key_erp');
+  const pinErp = valueFromRow(rows[0], columns, 'pin_erp');
   if (pin === undefined || pin === null || pin === '') {
     throw opsError('OPS_RESPONSE_INVALID', 'JoyBuilder Ops 返回结果中缺少 user_id。');
   }
@@ -246,7 +275,10 @@ export async function lookupPinViaJoyBuilderOps(key) {
     keyType: keyType === undefined || keyType === null ? null : String(keyType),
     appId: appId === undefined || appId === null ? null : String(appId),
     description: description === undefined || description === null ? null : String(description),
-    erp: erp === undefined || erp === null ? null : String(erp),
+    erp: keyErp === undefined || keyErp === null ? null : String(keyErp),
+    keyErp: keyErp === undefined || keyErp === null ? null : String(keyErp),
+    pinErp: pinErp === undefined || pinErp === null ? null : String(pinErp),
+    pinErpSupported: Boolean(pinTable),
   };
 }
 

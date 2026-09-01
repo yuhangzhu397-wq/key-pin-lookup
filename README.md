@@ -2,7 +2,7 @@
 
 一个独立的 MaaS 内网运营工具，包含：
 
-- Key 归属查询：输入 API Key（`pk-...`）或 Key ID（`key-...`），返回对应的 `user_id`（PIN）。
+- Key 归属查询：输入 API Key（`pk-...`）或 Key ID（`key-...`），返回对应的 `user_id`（PIN）、Key 使用人 ERP 和 PIN 对应 ERP。
 - TPM 总水位：按模型服务汇总全部 Key、全部 PIN 最近 60 秒的 Token 使用量，并除以 `model_service.tpm`，每 10 秒刷新。
 
 ## 本地预览
@@ -41,6 +41,7 @@ OPS_ACCESS_TOKEN=本地填写生成的Token
 OPS_DB_CONFIG_NAME=国内
 OPS_DATABASE=maas
 OPS_TABLE=api_key
+OPS_PIN_TABLE=
 ```
 
 如果部署平台占用了 `DATA_SOURCE` 或 `OPS_API_BASE` 这类通用变量名，可以改用应用专用变量：
@@ -86,27 +87,21 @@ DB_USER=只读账号
 DB_PASSWORD=数据库密码
 DB_NAME=maas
 DB_TABLE=api_key
+DB_PIN_TABLE=
 ```
 
-工具执行参数化前缀查询。调用方会将输入末尾追加 `%`，并转义 `_` 等 `LIKE` 通配符：
+工具执行参数化前缀查询。调用方会将输入末尾追加 `%`，并转义 `_` 等 `LIKE` 通配符。查询从配置的 Key 表精确定位最多两条记录，不会聚合或全量读取：
 
 ```sql
 SELECT user_id, api_key_id
-FROM api_key
-WHERE api_key LIKE ? ESCAPE '='
+FROM <configured_key_table>
+WHERE <key_or_id_column> LIKE ? ESCAPE '='
 LIMIT 2;
 ```
 
-或：
+未配置 `OPS_PIN_TABLE` 或 `DB_PIN_TABLE` 时，页面会将 PIN ERP 标为“当前数据源未提供”。如部署环境提供包含唯一 `user_id` 与 `erp` 字段的权威映射表或视图，可通过上述变量启用定点关联查询；程序仍不会全表聚合。不要使用 Key 使用人 ERP 推测 PIN ERP。
 
-```sql
-SELECT user_id, api_key_id
-FROM api_key
-WHERE api_key_id LIKE ? ESCAPE '='
-LIMIT 2;
-```
-
-为避免短前缀扫描过多数据，`pk-` 或 `key-` 后至少需要输入 4 位。查询最多读取两行：唯一匹配时返回 PIN，匹配多条时提示继续输入更多字符。建议确认 `api_key` 和 `api_key_id` 已建立索引。生产环境不要开启 `MOCK_MODE`。
+API Key 与 Key ID 查询使用相同结构，仅切换条件列。为避免短前缀扫描过多数据，`pk-` 或 `key-` 后至少需要输入 4 位。查询最多读取两行：唯一匹配时返回 PIN，匹配多条时提示继续输入更多字符。应为两个查询列建立索引；配置 PIN 映射表时，还必须保证其 `user_id` 唯一，重复映射会使查询失败而不会任意选择一个 ERP。生产环境不要开启 `MOCK_MODE`。
 
 ## 构建和运行
 

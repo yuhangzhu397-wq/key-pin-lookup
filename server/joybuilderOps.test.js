@@ -32,8 +32,8 @@ test('uses JoyBuilder Ops token and resolves a Key ID to PIN', async () => {
 
       response.end(JSON.stringify({
         data: {
-          columns: ['user_id', 'api_key_id', 'api_key', 'key_type', 'app_id', 'description', 'erp'],
-          rows: [['ZJPT888', 'key-demo-zjpt888', 'pk-demo-zjpt888', 'autoBind', 'app-demo', '演示 Key', 'demo.user']],
+          columns: ['user_id', 'api_key_id', 'api_key', 'key_type', 'app_id', 'description', 'key_erp', 'pin_erp'],
+          rows: [['ZJPT888', 'key-demo-zjpt888', 'pk-demo-zjpt888', 'autoBind', 'app-demo', '演示 Key', 'demo.user', 'demo.pin.owner']],
           total: 1,
         },
       }));
@@ -50,6 +50,7 @@ test('uses JoyBuilder Ops token and resolves a Key ID to PIN', async () => {
     process.env.OPS_DB_CONFIG_NAME = '国内';
     process.env.OPS_DATABASE = 'maas';
     process.env.OPS_TABLE = 'api_key';
+    process.env.OPS_PIN_TABLE = 'pin_erp_mapping_fixture';
     delete process.env.OPS_DB_CONFIG_ID;
 
     const result = await lookupPinViaJoyBuilderOps('key-demo-zjpt888');
@@ -63,6 +64,9 @@ test('uses JoyBuilder Ops token and resolves a Key ID to PIN', async () => {
       appId: 'app-demo',
       description: '演示 Key',
       erp: 'demo.user',
+      keyErp: 'demo.user',
+      pinErp: 'demo.pin.owner',
+      pinErpSupported: true,
     };
     assert.deepEqual(result, expected);
     assert.deepEqual(apiKeyResult, expected);
@@ -73,14 +77,89 @@ test('uses JoyBuilder Ops token and resolves a Key ID to PIN', async () => {
     assert.deepEqual(requests[1].body, {
       dbConfigId: 42,
       database: 'maas',
-      sql: "SELECT user_id, api_key_id, api_key, key_type, app_id, description, erp FROM `api_key` WHERE `api_key_id` LIKE 'key-demo-zjpt888%' ESCAPE '=' LIMIT 2",
+      sql: `SELECT
+    key_record.user_id,
+    key_record.api_key_id,
+    key_record.api_key,
+    key_record.key_type,
+    key_record.app_id,
+    key_record.description,
+    key_record.erp AS key_erp,
+    (
+      SELECT pin_user.erp
+      FROM \`pin_erp_mapping_fixture\` pin_user
+      WHERE pin_user.user_id = key_record.user_id
+    ) AS pin_erp
+  FROM \`api_key\` key_record
+  WHERE key_record.\`api_key_id\` LIKE 'key-demo-zjpt888%' ESCAPE '='
+  LIMIT 2`,
       page: 1,
       pageSize: 2,
     });
+    assert.doesNotMatch(requests[1].body.sql, /LIMIT 1/);
     assert.equal(
       requests[2].body.sql,
-      "SELECT user_id, api_key_id, api_key, key_type, app_id, description, erp FROM `api_key` WHERE `api_key` LIKE 'pk-demo-zjpt888%' ESCAPE '=' LIMIT 2",
+      `SELECT
+    key_record.user_id,
+    key_record.api_key_id,
+    key_record.api_key,
+    key_record.key_type,
+    key_record.app_id,
+    key_record.description,
+    key_record.erp AS key_erp,
+    (
+      SELECT pin_user.erp
+      FROM \`pin_erp_mapping_fixture\` pin_user
+      WHERE pin_user.user_id = key_record.user_id
+    ) AS pin_erp
+  FROM \`api_key\` key_record
+  WHERE key_record.\`api_key\` LIKE 'pk-demo-zjpt888%' ESCAPE '='
+  LIMIT 2`,
     );
+  } finally {
+    process.env = previous;
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test('keeps Key lookup available when the data source has no PIN ERP mapping table', async () => {
+  let queryBody;
+  const server = http.createServer((request, response) => {
+    let body = '';
+    request.on('data', (chunk) => { body += chunk; });
+    request.on('end', () => {
+      queryBody = JSON.parse(body);
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify({
+        data: {
+          columns: ['user_id', 'api_key_id', 'api_key', 'key_type', 'app_id', 'description', 'key_erp', 'pin_erp'],
+          rows: [['ZJPT888', 'key-demo-zjpt888', 'pk-demo-zjpt888', 'autoBind', 'app-demo', '演示 Key', '', null]],
+          total: 1,
+        },
+      }));
+    });
+  });
+
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  const previous = { ...process.env };
+
+  try {
+    process.env.JOYBUILDER_OPS_API_BASE = `http://127.0.0.1:${address.port}/api/v1`;
+    process.env.OPS_ACCESS_TOKEN = 'test-token';
+    process.env.OPS_DB_CONFIG_ID = '42';
+    process.env.OPS_DATABASE = 'maas';
+    process.env.OPS_TABLE = 'api_key';
+    delete process.env.OPS_PIN_TABLE;
+
+    const result = await lookupPinViaJoyBuilderOps('key-demo-zjpt888');
+
+    assert.equal(result.erp, '');
+    assert.equal(result.keyErp, '');
+    assert.equal(result.pinErp, null);
+    assert.equal(result.pinErpSupported, false);
+    assert.match(queryBody.sql, /NULL AS pin_erp/);
+    assert.doesNotMatch(queryBody.sql, /FROM `pin_erp_mapping_fixture`/);
   } finally {
     process.env = previous;
     await new Promise((resolve) => server.close(resolve));
