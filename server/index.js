@@ -5,7 +5,7 @@ import express from 'express';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import { accessControl } from './auth.js';
-import { lookupPin } from './db.js';
+import { lookupPin, fetchModelTpm, fetchQuotaCatalog, fetchUsageMonitor } from './db.js';
 import { isSupportedKey } from './validation.js';
 
 const app = express();
@@ -99,6 +99,28 @@ app.post('/api/lookup', async (request, response) => {
 
     console.error('lookup_failed', { code: error.code || 'UNKNOWN' });
     response.status(500).json({ message: '查询服务暂时不可用。' });
+  }
+});
+
+// Public portfolio previews use existing synthetic fixtures only.
+// Real-data monitoring stays disabled by the fallback route below.
+app.get(['/api/model-tpm', '/api/quotas', '/api/usage-monitor'], async (request, response, next) => {
+  if (process.env.MOCK_MODE !== 'true') {
+    next();
+    return;
+  }
+  response.set('Cache-Control', 'no-store');
+  response.set('X-Demo-Data', 'synthetic');
+  const loaders = {
+    '/api/model-tpm': fetchModelTpm,
+    '/api/quotas': fetchQuotaCatalog,
+    '/api/usage-monitor': fetchUsageMonitor,
+  };
+  try {
+    const data = await loaders[request.path]();
+    response.json(Array.isArray(data) ? { models: data } : data);
+  } catch {
+    response.status(500).json({ message: '演示数据暂时不可用。' });
   }
 });
 

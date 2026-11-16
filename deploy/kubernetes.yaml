@@ -24,7 +24,7 @@ spec:
             - name: DATA_SOURCE
               value: joybuilder_ops
             - name: OPS_API_BASE
-              value: http://joybuilder-ops.jdcloud.com/api/v1
+              value: https://ops.example.com/api/v1
             - name: OPS_DB_CONFIG_NAME
               value: 国内
             - name: OPS_DATABASE

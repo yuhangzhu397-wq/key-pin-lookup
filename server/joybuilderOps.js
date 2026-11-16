@@ -15,7 +15,7 @@ function opsError(code, message) {
 }
 
 function getApiBase() {
-  const fallback = 'http://joybuilder-ops.jdcloud.com/api/v1';
+  const fallback = 'https://ops.example.com/api/v1';
   const preferred = configured('JOYBUILDER_OPS_API_BASE');
   const legacy = configured('OPS_API_BASE');
   const value = preferred || (/^https?:\/\//i.test(legacy) ? legacy : fallback);

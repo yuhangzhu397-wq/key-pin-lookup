@@ -1,134 +1,42 @@
-# Key 归属查询
+# Key PIN Lookup
 
-一个独立的 MaaS 内网运营工具，包含：
+**面向 MaaS 运营的归属查询与容量水位演示工具。**
 
-- Key 归属查询：输入 API Key（`pk-...`）或 Key ID（`key-...`），返回对应的 `user_id`（PIN）、Key 使用人 ERP 和 PIN 对应 ERP。
-- TPM 总水位：按模型服务汇总全部 Key、全部 PIN 最近 60 秒的 Token 使用量，并除以 `model_service.tpm`，每 10 秒刷新。
+围绕“定位调用主体 → 查看模型水位 → 识别额度压力”组织运营信息。本仓库可使用 Mock 数据独立运行；公开展示不包含企业访问 Token、数据库凭据或真实客户记录。
 
-## 本地预览
+![MaaS 运营监控演示](docs/showcase/screenshots/monitoring.jpg)
+
+## 快速浏览
+
+- [产品案例与设计取舍](docs/showcase/product-case.md)
+- [三分钟演示与运行方式](docs/showcase/demo.md)
+- [数据源与配置说明](docs/integration.md)
+- [验证记录](docs/showcase/verification.md)
+
+## 展示能力
+
+| 模块 | 说明 |
+| --- | --- |
+| Key 归属查询 | 根据演示 API Key 或 Key ID 定位 PIN，区分 Key 使用人与 PIN 归属人 |
+| TPM 总水位 | 模型维度用量、容量和使用率的集中展示 |
+| 下游监控 | 将租户、模型、峰值用量与配额关联分析 |
+| 数据源边界 | Mock 为本地演示；真实适配器需要用户自己的授权配置 |
+
+## 本地演示
+
+建议 Node.js 22+、pnpm 11+。在仓库根目录执行：
 
 ```bash
 cp .env.example .env
-```
-
-将 `.env` 中的 `MOCK_MODE` 改为 `true`，然后运行：
-
-```bash
-pnpm install
-pnpm dev
-```
-
-打开 <http://127.0.0.1:5173>，可使用以下演示值：
-
-```text
-key-demo-zjpt888
-pk-demo-zjpt888
-```
-
-## 接入真实数据（推荐）
-
-工具可以复用 JoyBuilder Ops 的查询接口，不需要数据库密码。
-
-1. 打开 JoyBuilder Ops。
-2. 点击右上角用户名 → **我的 Token** → **生成 Token**。
-3. Token 只显示一次，请在服务器本地 `.env` 中配置，不要写进前端或发到聊天中：
-
-```dotenv
-MOCK_MODE=false
-DATA_SOURCE=joybuilder_ops
-OPS_API_BASE=http://joybuilder-ops.jdcloud.com/api/v1
-OPS_ACCESS_TOKEN=本地填写生成的Token
-OPS_DB_CONFIG_NAME=国内
-OPS_DATABASE=maas
-OPS_TABLE=api_key
-OPS_PIN_TABLE=
-```
-
-如果部署平台占用了 `DATA_SOURCE` 或 `OPS_API_BASE` 这类通用变量名，可以改用应用专用变量：
-
-```dotenv
-JOYMAAS_DATA_SOURCE=joybuilder_ops
-JOYBUILDER_OPS_API_BASE=http://joybuilder-ops.jdcloud.com/api/v1
-```
-
-工具会先通过 `/db-configs` 自动找到“国内”连接，再调用 `/query/execute` 查询。访问权限与生成 Token 的 JoyBuilder Ops 用户一致。
-
-如果存在多个同名连接，可额外配置：
-
-```dotenv
-OPS_DB_CONFIG_ID=数据库连接ID
-```
-
-### 下游配额持久缓存
-
-“下游配额”需要聚合 14 天分钟数据，首次分析可能较慢。JoyBuilder Ops 模式会按 24 小时分片读取记录，再在服务端合并 14 天峰值，避免单条聚合 SQL 压垮查询连接。只有全部分片成功才会发布新结果。服务会把每次成功结果写入本机缓存；以后即使服务重启，页面也会先立即展示上一次结果，再在后台更新：
-
-安全限制：下游监控不再读取 `api_key_rate_limit` 全量 Key 限额表；Key 侧只保留实际调用用量，PIN 侧仍读取 `user_rate_limit`。旧版缓存会因缓存版本升级自动失效。
-
-```dotenv
-USAGE_MONITOR_REFRESH_MINUTES=360
-USAGE_MONITOR_CACHE_FILE=.data/usage-monitor-cache.json
-```
-
-缓存默认每 6 小时更新，也可点击页面“重新分析”触发后台更新。同一时间只执行一份分析任务；首次分析失败且尚无缓存时，服务会每 5 分钟自动重试。缓存文件仅包含监控结果，不包含 JoyBuilder Ops Token 或完整 API Key，并已通过 `.gitignore` 排除。
-
-该机制只读取数据库，不会执行 `INSERT`、`UPDATE` 或 `DELETE`。如需清空本机缓存，可停止服务后删除 `.data/usage-monitor-cache.json`。
-
-## 直接连接 MySQL（备选）
-
-使用一个只允许查询目标表的 MySQL 只读账号，在 `.env` 中配置：
-
-```dotenv
-MOCK_MODE=false
-DATA_SOURCE=mysql
-DB_HOST=数据库地址
-DB_PORT=3306
-DB_USER=只读账号
-DB_PASSWORD=数据库密码
-DB_NAME=maas
-DB_TABLE=api_key
-DB_PIN_TABLE=
-```
-
-工具执行参数化前缀查询。调用方会将输入末尾追加 `%`，并转义 `_` 等 `LIKE` 通配符。查询从配置的 Key 表精确定位最多两条记录，不会聚合或全量读取：
-
-```sql
-SELECT user_id, api_key_id
-FROM <configured_key_table>
-WHERE <key_or_id_column> LIKE ? ESCAPE '='
-LIMIT 2;
-```
-
-未配置 `OPS_PIN_TABLE` 或 `DB_PIN_TABLE` 时，页面会将 PIN ERP 标为“当前数据源未提供”。如部署环境提供包含唯一 `user_id` 与 `erp` 字段的权威映射表或视图，可通过上述变量启用定点关联查询；程序仍不会全表聚合。不要使用 Key 使用人 ERP 推测 PIN ERP。
-
-API Key 与 Key ID 查询使用相同结构，仅切换条件列。为避免短前缀扫描过多数据，`pk-` 或 `key-` 后至少需要输入 4 位。查询最多读取两行：唯一匹配时返回 PIN，匹配多条时提示继续输入更多字符。应为两个查询列建立索引；配置 PIN 映射表时，还必须保证其 `user_id` 唯一，重复映射会使查询失败而不会任意选择一个 ERP。生产环境不要开启 `MOCK_MODE`。
-
-## 构建和运行
-
-```bash
+pnpm install --frozen-lockfile
 pnpm build
 pnpm start
 ```
 
-默认监听 `8080` 端口。生产环境建议放在公司统一登录网关或反向代理之后，并限制为 MaaS 运营角色访问。
+访问 `http://127.0.0.1:8080`。公开示例配置使用 `MOCK_MODE=true`、`AUTH_MODE=none`，仅适用于本地合成数据演示。查询可输入 `key-demo-zjpt888` 或 `pk-demo-zjpt888`。
 
-## 给运营团队部署
+真实数据模式的监控接口保持停用；本次仅开放 Mock 样例。归属查询接入真实数据需显式设置自己的服务地址、只读权限和访问控制。示例中的 `ops.example.com` 为占位域名；演示模式不连接它。
 
-内网部署文件已经准备好：
+## 与简历项目的关系
 
-- `Dockerfile`：生产镜像，多阶段构建、非 root 运行和健康检查。
-- `docker-compose.example.yml`：单机内网部署示例，仅绑定服务器本机端口。
-- `deploy/kubernetes.yaml`：Kubernetes Deployment 与 ClusterIP Service 模板。
-- `deploy/README.md`：统一登录网关、Token Secret 和发布检查说明。
-
-正式共享建议使用运营服务账号的 JoyBuilder Ops Token，并由公司统一登录网关校验运营权限。不要把个人 Token 烘焙进镜像。
-
-## 安全约束
-
-- Key 通过 POST 请求体提交，不进入 URL。
-- 前端不使用 localStorage、sessionStorage 或最近查询记录。
-- 本工具服务端不记录请求体或完整 Key；JoyBuilder Ops 或数据库仍可能保留查询审计记录。
-- JoyBuilder Ops Token 仅保存在服务端环境变量中，不下发浏览器。
-- 查询接口设置 `Cache-Control: no-store`。
-- 数据库账号必须是只读账号。
-- 重复映射不会自动取第一条，而是返回冲突错误。
+本仓库用于展示 MaaS 运营查询与部分水位监控能力。它不等同于简历中全局 AI Gateway 监控平台的完整实现，也不覆盖全部 RPM、错误率或供应商下钻功能。实习业务指标与本地演示数据分开陈述。
